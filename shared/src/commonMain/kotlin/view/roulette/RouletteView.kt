@@ -284,7 +284,7 @@ private fun DrawScope.drawRouletteWheel(
         val startAngle = -(angle * index) - (90 + angle)
 
         /* Scalable text by length */
-        val fontSize = (if (targetItemList[index].length >= 6) 20 else 26).sp.toPx()
+        val fontSize = ((if (targetItemList[index].length >= 6) 20 else 26) / (0.2 * targetItemList.size)).sp.toPx()
 
         // Draw the split part
         drawArc(
@@ -297,17 +297,6 @@ private fun DrawScope.drawRouletteWheel(
             style = Fill
         )
 
-        // Alloc TextLayoutResult
-        val textLayoutResult = textMeasurer.measure(
-            style = TextStyle(
-                textAlign = TextAlign.Center,
-                color = Color.Black,
-                fontSize = fontSize.toSp()
-            ),
-            text = targetItemList[index],
-            maxLines = 1,
-        )
-
         // Calculate the position of the text
         val textAngle = startAngle + angle / 2
 
@@ -315,13 +304,28 @@ private fun DrawScope.drawRouletteWheel(
          * Get offset(x, y) to set text in the middle of angle on each part
          */
         val textX =
-            centerX * 0.95f + (wheelRadius / 1.5f - fontSize / 2) * cos(toRadians(textAngle.toDouble())).toFloat() - if (fontSize > 0) fontSize / 2 else 0f
+            centerX + (wheelRadius / 1.5f - fontSize / 2) * cos(toRadians(textAngle.toDouble()))
+                .toFloat()
         val textY =
-            centerY * 0.95f + (wheelRadius / 1.5f - fontSize / 2) * sin(toRadians(textAngle.toDouble())).toFloat()
+            centerY + (wheelRadius / 1.5f - fontSize / 2) * sin(toRadians(textAngle.toDouble()))
+                .toFloat()
+
+        // Alloc TextLayoutResult
+        val textLayoutResult = textMeasurer.measure(
+            style = TextStyle(
+                textAlign = TextAlign.Center,
+                color = Color.Black,
+                fontSize = fontSize.toSp(),
+            ),
+            text = targetItemList[index],
+            maxLines = 1,
+        )
+
+        val adjust = (textLayoutResult.size.width / 2)
 
         drawText(
             textLayoutResult = textLayoutResult,
-            topLeft = Offset(textX, textY),
+            topLeft = Offset((textX * 0.95f - adjust), textY * 0.95f),
             drawStyle = Fill
         )
     }
@@ -384,7 +388,6 @@ fun InputBoxLayer(
             Spacer(modifier = Modifier.height(12.dp))
 
             Row {
-
                 BasicTextField(
                     modifier = Modifier.border(
                         border = BorderStroke(
