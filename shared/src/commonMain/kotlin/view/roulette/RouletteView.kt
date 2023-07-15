@@ -35,10 +35,10 @@ import ui.ext.noRippleClickable
 import ui.theme.LocalStringResources
 import util.toRadians
 import view.LocalGameControllerProvider
-import view.roulette.RouletteViewModel.Companion.COLOR_LIST
-import view.roulette.RouletteViewModel.Companion.MAX_CANDIDATE
-import view.roulette.RouletteViewModel.Companion.MIN_CANDIDATE
-import view.roulette.RouletteViewModel.Companion.ROUND_ANGLE
+import view.roulette.RouletteCalculator.Companion.COLOR_LIST
+import view.roulette.RouletteCalculator.Companion.MAX_CANDIDATE
+import view.roulette.RouletteCalculator.Companion.MIN_CANDIDATE
+import view.roulette.RouletteCalculator.Companion.ROUND_ANGLE
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -48,15 +48,14 @@ private const val TIME_RUNNING = 5000
 @OptIn(ExperimentalAnimationApi::class, ExperimentalResourceApi::class, ExperimentalTextApi::class)
 @Composable
 fun RouletteGameView() {
-    val viewModel = RouletteViewModel()
+    val rouletteCalculator = RouletteCalculator()
     val gameController = LocalGameControllerProvider.current
 
     val targetList = remember { mutableStateListOf("", "", "", "") }
 
     var manipulatedTargetIndex by remember { mutableStateOf(-1) }  // Manipulated Index (target)
-    var targetValue = viewModel.getTargetAngle(
-        manipulatedTargetIndex,
-        ROUND_ANGLE.toInt() / targetList.size
+    var targetValue = rouletteCalculator.getTargetAngle(
+        manipulatedTargetIndex, ROUND_ANGLE.toInt() / targetList.size
     )
 
     var resultTarget by remember { mutableStateOf("") }
@@ -71,9 +70,7 @@ fun RouletteGameView() {
         contentAlignment = Alignment.Center
     ) {
         var selectedIndex by remember { mutableStateOf(-1) } // Selected Index for label setting
-
-        val animatedProgress: Float by animateFloatAsState(
-            targetValue = if (gameStatus == GameStatus.READY) 0f else targetValue,
+        val animatedProgress: Float by animateFloatAsState(targetValue = if (gameStatus == GameStatus.READY) 0f else targetValue,
             animationSpec = tween(
                 durationMillis = if (gameStatus != GameStatus.READY) TIME_RUNNING else TIME_RESET,
                 easing = FastOutSlowInEasing,
@@ -85,35 +82,21 @@ fun RouletteGameView() {
             }
         )
 
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize(0.9f)
-                .pointerInput(Unit) {
-                    // returns when roulette game started or finished
-                    // this action will only work on the state of 'ready'
-                    if (gameStatus == GameStatus.READY) {
-                        detectTapGestures(
-                            onDoubleTap = { doubleTapGesture ->
-                                manipulatedTargetIndex = viewModel.getIndexFromAngle(
-                                    doubleTapGesture,
-                                    size,
-                                    ROUND_ANGLE / targetList.size
-                                )
-                            },
-                            onTap = { tapGesture ->
-                                selectedIndex = viewModel.getIndexFromAngle(
-                                    tapGesture,
-                                    size,
-                                    ROUND_ANGLE / targetList.size
-                                )
-                            }
-                        )
-                    }
-                }
-        ) {
-            val wheelRadius = size.minDimension / 2
-            val centerX = size.width / 2
-            val centerY = size.height / 2
+        Canvas(modifier = Modifier.fillMaxSize(0.9f).pointerInput(Unit) {
+            // returns when roulette game started or finished
+            // this action will only work on the state of 'ready'
+            if (gameStatus == GameStatus.READY) {
+                detectTapGestures(onDoubleTap = { doubleTapGesture ->
+                    manipulatedTargetIndex = rouletteCalculator.getIndexFromAngle(
+                        doubleTapGesture, size, ROUND_ANGLE / targetList.size
+                    )
+                }, onTap = { tapGesture ->
+                    selectedIndex = rouletteCalculator.getIndexFromAngle(
+                        tapGesture, size, ROUND_ANGLE / targetList.size
+                    )
+                })
+            }
+        }) {
             /*
              * When start button clicked, animatedProgress value (which is float)
              * will be animating to targetValue, turns out rotate RouletteWheel
@@ -135,12 +118,13 @@ fun RouletteGameView() {
 
                 Row(modifier = Modifier.offset(0.dp, maxWidth / 2 + 30.dp)) {
                     AdjustableButton(
-                        iconKey = "ic_minus.png",
-                        minusBtnVisibility
+                        iconKey = "ic_minus.png", minusBtnVisibility
                     ) { targetList.removeLast() }
+
                     Spacer(modifier = Modifier.width(8.dp))
                     StartButton { gameStatus = GameStatus.STARTED }
                     Spacer(modifier = Modifier.width(8.dp))
+
                     AdjustableButton(
                         iconKey = "ic_add.png", plusBtnVisibility
                     ) { targetList.add("") }
@@ -151,26 +135,21 @@ fun RouletteGameView() {
                 Icon(
                     painter = painterResource("ic_arrow.png"),
                     contentDescription = "Arrow Icon",
-                    modifier = Modifier
-                        .size(48.dp)
-                        .offset(0.dp, -(maxWidth / 2) + 15.dp),
+                    modifier = Modifier.size(48.dp).offset(0.dp, -(maxWidth / 2) + 15.dp),
                     tint = Color.Unspecified
                 )
 
                 if (gameStatus == GameStatus.FINISHED) {
-                    resultTarget =
-                        targetList[viewModel.getResultIndex(
-                            targetValue,
-                            ROUND_ANGLE / targetList.size
-                        )]
+                    resultTarget = targetList[rouletteCalculator.getResultIndex(
+                        targetValue, ROUND_ANGLE / targetList.size
+                    )]
                     // Let 'Restart button' visible
                     StartButton(LocalStringResources.current.restart) {
                         gameStatus = GameStatus.READY
                         resultTarget = ""
                         manipulatedTargetIndex = -1
-                        targetValue = viewModel.getTargetAngle(
-                            manipulatedTargetIndex,
-                            ROUND_ANGLE.toInt() / targetList.size
+                        targetValue = rouletteCalculator.getTargetAngle(
+                            manipulatedTargetIndex, ROUND_ANGLE.toInt() / targetList.size
                         )
                     }
                 }
@@ -196,7 +175,7 @@ fun RouletteGameView() {
         // only if index is positive
         if (selectedIndex >= 0 && gameStatus == GameStatus.READY) {
             InputBoxLayer(
-                targetIndex = selectedIndex,
+                selectedIndex = selectedIndex,
                 originText = targetList[selectedIndex],
                 color = COLOR_LIST[selectedIndex]
             ) { index, text ->
@@ -210,26 +189,25 @@ fun RouletteGameView() {
 }
 
 
+/**
+ * StartButton
+ * @param label start, restart for now
+ * @param onClick () -> Unit, hoisting click event
+ */
 @Composable
 private fun StartButton(label: String = LocalStringResources.current.start, onClick: () -> Unit) {
     var pressed by remember { mutableStateOf(false) }
     Box(
-        modifier = Modifier
-            .background(
-                color = Color.Black.copy(alpha = if (!pressed) 0.8f else 1f),
-                shape = RoundedCornerShape(32.dp)
-            )
-            .border(
-                width = 2.dp,
-                color = Color.White,
-                shape = RoundedCornerShape(32.dp)
-            )
-            .noRippleClickable(
-                onPress = {
-                    pressed = it
-                },
-                onClick = { onClick() }
-            )
+        modifier = Modifier.background(
+            color = Color.Black.copy(alpha = if (!pressed) 0.8f else 1f),
+            shape = RoundedCornerShape(32.dp)
+        ).border(
+            width = 2.dp,
+            color = Color.White,
+            shape = RoundedCornerShape(32.dp)
+        ).noRippleClickable(onPress = {
+            pressed = it    // changes state and re-compose to make background color change
+        }, onClick = { onClick() })
     ) {
         Text(
             text = label,
@@ -242,6 +220,14 @@ private fun StartButton(label: String = LocalStringResources.current.start, onCl
     }
 }
 
+/**
+ * AdjustableButton
+ * @param iconKey drawable icon image's key(file name)
+ * @param isVisible whether visible or not
+ * @param onClick hoisting click event
+ *
+ * set plus/minus value of size of list
+ */
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 private fun AdjustableButton(iconKey: String, isVisible: Boolean, onClick: () -> Unit) {
@@ -250,12 +236,10 @@ private fun AdjustableButton(iconKey: String, isVisible: Boolean, onClick: () ->
         pressed = false
     }
     Icon(
-        modifier = Modifier
-            .background(
-                color = if (pressed) Color.Black else Color.White,
-                shape = CircleShape
-            )
-            .size(48.dp)
+        modifier = Modifier.background(
+            color = if (pressed) Color.Black else Color.White,
+            shape = CircleShape
+        ).size(48.dp)
             .padding(8.dp)
             .alpha(if (!isVisible) 0f else 1f)
             .noRippleClickable(
@@ -271,21 +255,21 @@ private fun AdjustableButton(iconKey: String, isVisible: Boolean, onClick: () ->
 
 /**
  * drawRouletteWheel
- * @param itemList List<String>
+ * @param targetItemList List<String>
+ * @param textMeasurer value of rememberTextMeasurer
  *
  * requires string item list to put text each surface of parts
  */
 @OptIn(ExperimentalTextApi::class)
 private fun DrawScope.drawRouletteWheel(
-    itemList: List<String>,
-    textMeasurer: TextMeasurer
+    targetItemList: List<String>, textMeasurer: TextMeasurer
 ) {
     val wheelRadius = size.minDimension / 2
     val centerX = size.width / 2
     val centerY = size.height / 2
     val strokeWidth = 14.dp.toPx()
 
-    val angle = 360f / itemList.size
+    val angle = 360f / targetItemList.size
 
     // Draw the outer circle
     drawCircle(
@@ -296,11 +280,11 @@ private fun DrawScope.drawRouletteWheel(
     )
 
     // Draw arcs and text on each split part
-    repeat(itemList.size) { index ->
+    repeat(targetItemList.size) { index ->
         val startAngle = -(angle * index) - (90 + angle)
 
         /* Scalable text by length */
-        val fontSize = (if (itemList[index].length >= 6) 20 else 26).sp.toPx()
+        val fontSize = (if (targetItemList[index].length >= 6) 20 else 26).sp.toPx()
 
         // Draw the split part
         drawArc(
@@ -313,20 +297,25 @@ private fun DrawScope.drawRouletteWheel(
             style = Fill
         )
 
+        // Alloc TextLayoutResult
         val textLayoutResult = textMeasurer.measure(
             style = TextStyle(
                 textAlign = TextAlign.Center,
                 color = Color.Black,
                 fontSize = fontSize.toSp()
             ),
-            text = itemList[index],
+            text = targetItemList[index],
             maxLines = 1,
         )
 
         // Calculate the position of the text
         val textAngle = startAngle + angle / 2
+
+        /*
+         * Get offset(x, y) to set text in the middle of angle on each part
+         */
         val textX =
-            centerX * 0.95f + (wheelRadius / 1.5f - fontSize / 2) * cos(toRadians(textAngle.toDouble())).toFloat() - if(fontSize > 0) fontSize / 2 else 0f
+            centerX * 0.95f + (wheelRadius / 1.5f - fontSize / 2) * cos(toRadians(textAngle.toDouble())).toFloat() - if (fontSize > 0) fontSize / 2 else 0f
         val textY =
             centerY * 0.95f + (wheelRadius / 1.5f - fontSize / 2) * sin(toRadians(textAngle.toDouble())).toFloat()
 
@@ -341,13 +330,17 @@ private fun DrawScope.drawRouletteWheel(
 
 /**
  * InputBoxLayer
+ * @param selectedIndex an index where user tapped
+ * @param originText text used to be
+ * @param color font color, which is designated already
+ * @param out hoisting selectedIndex with edited text
  * TextField which enables target setting on selected spot
  */
 @Composable
 fun InputBoxLayer(
-    targetIndex: Int = 0,
+    selectedIndex: Int = 0,
     originText: String = "",
-    color: Color = Color.Yellow,
+    color: Color,
     out: (Int, String) -> Unit = { _, _ -> },
 ) {
     val localStringResource = LocalStringResources.current
@@ -379,8 +372,7 @@ fun InputBoxLayer(
                 enabled = true,
                 indication = null,
                 interactionSource = MutableInteractionSource()
-            ) {},
-        contentAlignment = Alignment.Center
+            ) {}, contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
@@ -394,17 +386,16 @@ fun InputBoxLayer(
             Row {
 
                 BasicTextField(
-                    modifier = Modifier
-                        .border(
-                            border = BorderStroke(
-                                brush = Brush.horizontalGradient(
-                                    0.1f to colorAnim,
-                                    1f to colorAnim,
-                                    tileMode = TileMode.Mirror
-                                ), width = 2.dp
-                            ), shape = RoundedCornerShape(45.dp)
-                        )
-                        .focusRequester(focusRequester),
+                    modifier = Modifier.border(
+                        border = BorderStroke(
+                            brush = Brush.horizontalGradient(
+                                0.1f to colorAnim,
+                                1f to colorAnim,
+                                tileMode = TileMode.Mirror
+                            ), width = 2.dp
+                        ),
+                        shape = RoundedCornerShape(45.dp)
+                    ).focusRequester(focusRequester),
                     value = text,
                     cursorBrush = SolidColor(color),
                     onValueChange = { str ->
@@ -427,13 +418,14 @@ fun InputBoxLayer(
                     maxLines = 1,
                     keyboardActions = KeyboardActions {
                         /* do when action */
-                        out(targetIndex, text)
+                        out(selectedIndex, text)
                     },
                 )
 
-                AdjustableButton(iconKey = "ic_add.png", true) {
+                Spacer(modifier = Modifier.width(12.dp))
+                AdjustableButton(iconKey = "ic_check.png", true) {
                     /* onClick */
-                    out(targetIndex, text)
+                    out(selectedIndex, text)
                 }
             }
         }
@@ -446,7 +438,5 @@ fun InputBoxLayer(
 }
 
 enum class GameStatus {
-    READY,
-    STARTED,
-    FINISHED
+    READY, STARTED, FINISHED
 }
